@@ -61,6 +61,9 @@ class PolicyConfig:
     chunk: int = 20  # action chunk size
     exp: float = 0.99  # exponential weighting for ensembler, higher means more weight on recent predictions
     warmup: bool = True  # whether to run a warmup phase to trigger compilation and stabilize predictions
+    # BELA-trunk checkpoints (e.g. 0707 xarm_sim) carry {readout}_xattn/_process params that
+    # CrossFormerModel cannot restore; load them via BELAModel instead
+    bela: bool = False
 
     def verify(self) -> None:
         path = Path(self.path).expanduser().resolve()
@@ -128,6 +131,10 @@ TASKS = {
         "text": "pick up the red block",
         "dataset_name": "xgym_lift_single",
     },
+    "lift_sim": {
+        "text": "pick up the red block",
+        "dataset_name": "xarm_sim",  # sim-trained checkpoints carry only xarm_sim stats
+    },
     "play": {"text": "pick up any object", "dataset_name": "xgym_play_single"},
 }
 
@@ -153,7 +160,13 @@ class Policy(BasePolicy):
     def __init__(self, cfg: PolicyConfig) -> None:
         self.cfg = cfg
 
-        self.model: CrossFormerModel = CrossFormerModel.load_pretrained(cfg.path, step=cfg.step)
+        if cfg.bela:
+            from crossformer.model.bela import BELAModel
+
+            model_cls = BELAModel
+        else:
+            model_cls = CrossFormerModel
+        self.model: CrossFormerModel = model_cls.load_pretrained(cfg.path, step=cfg.step)
         if self.model.dataset_statistics is None:
             raise ValueError(
                 f"Checkpoint at {cfg.path} has no dataset_statistics. "
@@ -205,7 +218,8 @@ class Policy(BasePolicy):
         self.num_obs = 0
         self.emsembler.reset()
 
-    def reset(self, payload: dict) -> Any:
+    def reset(self, payload: dict | None = None) -> Any:
+        payload = payload or {}
         name = payload.get("model", "crossformer")
         if "goal" in payload:
             goal_size = self.img_hw.get("image_primary", (224, 224))
@@ -217,7 +231,9 @@ class Policy(BasePolicy):
             self.text = text
             self.task = self.model.create_tasks(texts=[text])
         else:
-            return {"reset": False, "error": "No goal or text provided"}
+            # task-tokenizer-free checkpoints (e.g. xarm_sim single-task): a bare reset
+            # just clears history and keeps the example-batch task, matching warmup
+            self.task = self.model.example_batch["task"]
 
         self.reset_history()
 

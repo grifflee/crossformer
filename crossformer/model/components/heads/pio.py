@@ -126,12 +126,19 @@ class PerceiverIOHead(XFlowHead):
         guidance_tokens = self._encode_guidance(guide_input, train=train)
 
         if slot_pos is None:
-            slot_pos = jnp.broadcast_to(jnp.arange(max_A, dtype=jnp.float32), dof_ids.shape)
+            # positions of the requested dofs' slots; arange over the REQUEST width, not
+            # max_A — inference clients may query a dof subset (e.g. arm+gripper = 8 of 140)
+            slot_pos = jnp.broadcast_to(
+                jnp.arange(dof_ids.shape[-1], dtype=jnp.float32), dof_ids.shape
+            )
         if view_ids is None:
             view_ids = jnp.zeros_like(dof_ids)
 
         if a_t.ndim == 3:
-            a_t = rearrange(a_t, "b w (h a) -> b w h a", h=max_H, a=max_A)
+            # request widths, not head maxima: sampling may query a dof/horizon subset
+            a_t = rearrange(
+                a_t, "b w (h a) -> b w h a", h=chunk_steps.shape[-1], a=dof_ids.shape[-1]
+            )
 
         B, W = time.shape[:2]
 
