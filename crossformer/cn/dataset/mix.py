@@ -187,8 +187,14 @@ XGYM = [
             chunk=50,
             ),
 ]
-XGYM_WEIGHTS = [len(x.source) for x in XGYM]  # size weighted rn, not uniform
-XGYM_WEIGHTS = [w / sum(XGYM_WEIGHTS) for w in XGYM_WEIGHTS]
+try:
+    XGYM_WEIGHTS = [len(x.source) for x in XGYM]  # size weighted rn, not uniform
+    XGYM_WEIGHTS = [w / sum(XGYM_WEIGHTS) for w in XGYM_WEIGHTS]
+except FileNotFoundError:
+    # no/partial local arrayrecord cache (e.g. serving-only machines): size weighting
+    # needs the training shards, but importing this module must not. Uniform fallback;
+    # anything that actually reads the data still fails loudly at load time.
+    XGYM_WEIGHTS = [1.0 / len(XGYM)] * len(XGYM)
 
 Arec(name="xarm_sim", head=Head.SINGLE, embodiment=SINGLE, version="0.0.1", branch="main",
      restructure=ModuleSpec.create("crossformer.data.grain.restructure:restructure_lift_0513"),
