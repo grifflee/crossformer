@@ -61,10 +61,14 @@ class SimBuildMGR(BuildMGR):
 
     branch: str = "main"
     writer: Literal["source", "multisource"] = "multisource"
+    root: Path | None = None  # arec output root override (default ~/.cache/arrayrecords); for small-/ machines
+    est_steps: int | None = None  # skip the counting pass, use this as the progress-bar total (data unaffected)
 
     def build(self, fn: Callable[[], Iterable[Any]]) -> None:
         print(self)
         kwargs = {} if self.shard_size is None else {"shard_size": self.shard_size}
+        if self.root is not None:
+            kwargs["root"] = self.root
         builder: ArrayRecordBuilder = ArrayRecordBuilder(
             name=self.name,
             version=self.version,
@@ -215,10 +219,14 @@ def main(cfg: SimBuildMGR) -> None:
             print(spec(x))
         return
 
-    total = sum(
-        int(x["info"]["len"][0]) for x in tqdm(make_dataset(loader, cfg), total=len(loader), desc="Counting steps")
-    )
-    print(f"total_steps={total}")
+    if cfg.est_steps is not None:
+        total = cfg.est_steps
+        print(f"total_steps={total} (estimated via --est-steps; counting pass skipped)")
+    else:
+        total = sum(
+            int(x["info"]["len"][0]) for x in tqdm(make_dataset(loader, cfg), total=len(loader), desc="Counting steps")
+        )
+        print(f"total_steps={total}")
 
     ds = make_dataset(loader, cfg)
     ds = ThreadPrefetchIterDataset(ds, prefetch_buffer_size=1)
