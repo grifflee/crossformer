@@ -12,7 +12,6 @@ from typing import Any, Iterator
 import jax
 import jax.numpy as jnp
 import numpy as np
-import nvdiffrast.torch as dr
 import pyroki as pk
 import torch
 import yourdfpy
@@ -139,6 +138,11 @@ class _GpuRasterizer:
     """Batched GPU silhouette rasterizer via nvdiffrast."""
 
     def __init__(self, faces: np.ndarray, device: torch.device | None = None):
+        # lazy import: nvdiffrast needs a CUDA toolchain to build, which not
+        # every training box has; only the rast callback itself requires it
+        import nvdiffrast.torch as dr
+
+        self.dr = dr
         self.device = device or torch.device("cuda")
         self.glctx = dr.RasterizeCudaContext(device=self.device)
         self.faces = torch.tensor(faces, dtype=torch.int32, device=self.device)
@@ -146,7 +150,7 @@ class _GpuRasterizer:
     def render_masks(self, verts_clip: np.ndarray, width: int, height: int) -> np.ndarray:
         """Rasterize (B, V, 4) clip-space verts to (B, H, W) binary masks."""
         pos = torch.tensor(np.ascontiguousarray(verts_clip), dtype=torch.float32, device=self.device)
-        rast_out, _ = dr.rasterize(self.glctx, pos, self.faces, resolution=[height, width])
+        rast_out, _ = self.dr.rasterize(self.glctx, pos, self.faces, resolution=[height, width])
         masks = (rast_out[:, :, :, 3] > 0).float()
         masks = torch.flip(masks, dims=[1])  # Y-flip to match image convention
         return masks.cpu().numpy()
