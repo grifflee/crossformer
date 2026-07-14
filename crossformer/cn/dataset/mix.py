@@ -187,7 +187,22 @@ XGYM = [
             chunk=50,
             ),
 ]
-XGYM_WEIGHTS = [len(x.source) for x in XGYM]  # size weighted rn, not uniform
+def _arec_len(a: Arec) -> int:
+    """Record count for size-weighting; 1 if the arec isn't on this machine.
+
+    Opening every XGYM source at import time crashes module import on hosts
+    that only carry a subset of the datasets. A missing source only matters
+    if the run actually selects a mix containing it, so fall back to a
+    uniform weight of 1 instead of raising.
+    """
+    try:
+        return len(a.source)
+    except FileNotFoundError:
+        log.warning("arec %r not found on this machine; using weight 1 for size-weighting", a.name)
+        return 1
+
+
+XGYM_WEIGHTS = [_arec_len(x) for x in XGYM]  # size weighted rn, not uniform
 XGYM_WEIGHTS = [w / sum(XGYM_WEIGHTS) for w in XGYM_WEIGHTS]
 
 Arec(name="xarm_sim", head=Head.SINGLE, embodiment=SINGLE, version="0.0.1", branch="main",
