@@ -243,7 +243,10 @@ def compute_dataset_statistics(
 
     print("computing stats for dataset with", N, "transitions and", t, "trajectories")
     mpit = iter(mpds)
-    trees = list(tqdm(mpit, desc="Loading ds for stats computation...", total=t // _bs))
+    # drain the iterator so .map(_update) accumulates into streams; storing the
+    # records (list()) holds the whole dataset in RAM and OOMs large arecs
+    for _ in tqdm(mpit, desc="Loading ds for stats computation...", total=t // _bs):
+        pass
     stats = jax.tree.map(lambda s: ArrayStatistics(**s.finalize()), streams)
 
     print(stats)
