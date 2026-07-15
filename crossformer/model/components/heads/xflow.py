@@ -575,7 +575,10 @@ class XFlowHead(nn.Module, ActionHead):
                 (*N, B, W, max_H, max_A).
         """
         module, variables = self.unbind()
-        max_H, max_A = self.max_horizon, self.max_dofs
+        # widths follow the REQUEST, not the head maxima: inference clients may query a
+        # dof/horizon subset (e.g. arm+gripper over 20 steps = 8x20 of the 140x50 vocab)
+        max_H = int(chunk_steps.shape[-1])
+        max_A = int(dof_ids.shape[-1])
 
         # Ensure guidance_mask is explicit so zeros_like works in CFG path
         if cfg_scale is not None and guidance_mask is None and guide_input is not None:
