@@ -29,9 +29,26 @@ class ValMSECallback:
     head_name: str = "action"
     sample_idx: int = 0
     print_sample: bool = True
+    # eval batches averaged per firing (pulled via ctx.next_ctx). A single
+    # batch of 16 makes the val curve noise-dominated; noise ~ 1/sqrt(batches).
+    batches: int = 10
     _eval_fns: dict[bool, Any] = field(default_factory=dict, init=False, repr=False)
 
     def __call__(self, ctx: EvalContext) -> dict[str, float]:
+        totals: dict[str, float] = {}
+        n_batches = max(1, self.batches)
+        n = 0
+        for i in range(n_batches):
+            out = self._eval_one(ctx, print_sample=self.print_sample and i == 0)
+            for k, v in out.items():
+                totals[k] = totals.get(k, 0.0) + float(v)
+            n += 1
+            if i + 1 >= n_batches or ctx.next_ctx is None:
+                break
+            ctx = ctx.next_ctx()
+        return {k: v / n for k, v in totals.items()}
+
+    def _eval_one(self, ctx: EvalContext, print_sample: bool) -> dict[str, float]:
         batch = ctx.batch
         obs = batch["observation"]
         task = batch.get("task", {"pad_mask_dict": {}})
@@ -65,7 +82,7 @@ class ValMSECallback:
             out.update(metrics)
             samples["guided"] = sample
 
-        if self.print_sample:
+        if print_sample:
             self._print_sample(ctx.step, samples)
         return out
 
