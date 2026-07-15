@@ -67,6 +67,7 @@ class Config:
     eval_batch_size: int = 64  # eval loader batch size; keep modest so large train batches still boot
     mix: str = "xgym_sweep"  # dataset mix name
     horizon: int = 20  # action horizon from data pipeline
+    val_mod: int = 50  # hold out 1-in-N episodes for validation (0 = no split; eval reads train data)
     verbose: bool = False  # print model tabulation during init
     model: cn.ModelFactory = default(
         cn.ModelFactory(
@@ -266,9 +267,15 @@ def main(cfg: Config) -> None:
         ),
         recompute=cfg.recompute,
     )
-    dataset = GrainDataFactory(mp=cfg.mp, rotate=cfg.rotate, resize=effective_resize, batches=cfg.batches).make(
-        train_cfg, shard_fn=partial(shard_batch, mesh=mesh), train=True
-    )
+    holdout_kw = dict(holdout_mod=cfg.val_mod) if cfg.val_mod > 0 else {}
+    dataset = GrainDataFactory(
+        mp=cfg.mp,
+        rotate=cfg.rotate,
+        resize=effective_resize,
+        batches=cfg.batches,
+        holdout="train" if cfg.val_mod > 0 else None,
+        **holdout_kw,
+    ).make(train_cfg, shard_fn=partial(shard_batch, mesh=mesh), train=True)
     if cfg.batches is not None:
         print(f"  [bold yellow]overfit mode: cycling first {cfg.batches} batch(es) forever[/]")
     dsit = iter(dataset.dataset)
@@ -281,6 +288,8 @@ def main(cfg: Config) -> None:
         imaug=True,
         rotate=cfg.rotate,
         resize=effective_resize,
+        holdout="val" if cfg.val_mod > 0 else None,
+        **holdout_kw,
     ).make(eval_cfg, shard_fn=partial(shard_batch, mesh=mesh), train=False)
     print(spec(example_batch))
     inferred_image_keys, inferred_proprio_keys = infer_model_keys(example_batch["observation"])

@@ -370,6 +370,12 @@ class GrainDataFactory:
     # take only the first n batches: cycled forever when train=True (overfit
     # debugging), truncated when train=False. None = all batches.
     batches: int | None = None
+    # episode-level holdout split: "train" drops val episodes, "val" keeps only
+    # them, None disables. Split at episode granularity so chunks from one
+    # episode never straddle both sides. NOTE: dataset statistics are computed
+    # before this filter (over all episodes) to keep the stats cache valid.
+    holdout: str | None = None
+    holdout_mod: int = 50  # 1-in-N episodes go to val
 
     verbose: bool = False  # log extra info like batch spec, and warmup prefetch
 
@@ -381,6 +387,11 @@ class GrainDataFactory:
             seed=cfg.seed,
             resize=self.resize,
         )
+        if self.holdout is not None:
+            keep_val = self.holdout == "val"
+            mod = self.holdout_mod
+            ds = ds.filter(lambda x: (int(x["info"]["id"]["episode"][0]) % mod == 0) == keep_val)
+            log.info("holdout=%s: episode %% %d %s 0 (%s)", self.holdout, mod, "==" if keep_val else "!=", dconfig.name)
         if max_a > 0:
             embody_fn = partial(
                 embody_transform,
