@@ -630,6 +630,18 @@ xarm_sim = Dataset(
     version="0.0.1",
     branch="main",
 )
+# 96x72 rebuild of the sim lift set: 20,995 episodes / 3.88M records, vs ~2.5k
+# episodes for xarm_sim above. Separate name because the image shape is part of the
+# arec schema fingerprint, and because norm stats are keyed by dataset name.
+xarm_sim_96 = Dataset(
+    "xarm_sim_96",
+    SINGLE,
+    SourceType.AREC,
+    images=_XGYM_IMG,
+    proprio=_XGYM_PROPRIO,
+    version="0.0.1",
+    branch="main",
+)
 xgym_sweep = Dataset(
     "xgym_sweep_single",
     SINGLE,

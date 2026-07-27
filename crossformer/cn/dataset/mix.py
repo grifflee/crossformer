@@ -210,6 +210,13 @@ Arec(name="xarm_sim", head=Head.SINGLE, embodiment=SINGLE, version="0.0.1", bran
      chunk=50,
      )
 
+# 96x72 rebuild, 20,995 episodes / 3.88M records (xarm_sim above is ~2.5k episodes at
+# 640x480). Same builder and so the same schema keys, so the same restructure applies.
+Arec(name="xarm_sim_96", head=Head.SINGLE, embodiment=SINGLE, version="0.0.1", branch="main",
+     restructure=ModuleSpec.create("crossformer.data.grain.restructure:restructure_lift_0513"),
+     chunk=50,
+     )
+
 NEW = [
     Arec(
         name="xarm_dream_100k",
