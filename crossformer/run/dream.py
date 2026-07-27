@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import jax
@@ -209,6 +210,20 @@ def project_world_to_cam(kp3dw: np.ndarray, w2c: np.ndarray) -> tuple[np.ndarray
     return kp3dc, mask
 
 
+@lru_cache(maxsize=4)
+def _cached_keypoints(urdf_path: Path, mesh_dir: Path | None) -> RobotKeypoints:
+    """One RobotKeypoints per (urdf, mesh_dir).
+
+    Constructing one loads and merges every mesh in the URDF and builds a fresh
+    ``jax.jit`` wrapper, whose compilation cache lives on the wrapper object. Built
+    per call, that recompiles the FK for a single use and re-parses the meshes every
+    time: on a 21k-episode arec build it was ~7/8 of the converter's main-process
+    time. The instance is immutable after __init__ -- fk() only reads attributes and
+    computes from its arguments -- so sharing one is bit-identical to building each.
+    """
+    return RobotKeypoints(urdf_path, mesh_dir)
+
+
 def robot_keypoints_in_cameras(
     joints: np.ndarray,
     gripper: np.ndarray,
@@ -217,7 +232,7 @@ def robot_keypoints_in_cameras(
     urdf_path: Path,
     mesh_dir: Path | None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    robot = RobotKeypoints(urdf_path, mesh_dir)
+    robot = _cached_keypoints(urdf_path, mesh_dir)
     kp3dw = robot.fk(np.asarray(joints, dtype=np.float32), gripper=np.asarray(gripper, dtype=np.float32))
     kp3dc, kp3dc_mask = project_world_to_cam(kp3dw, np.asarray(w2c, dtype=np.float32))
     return kp3dw, kp3dc, kp3dc_mask
