@@ -234,6 +234,13 @@ def compute_dataset_statistics(
                 streams[key].update(samples[i], None if masks is None else masks[i])
         return x
 
+    # Bound by per-record Python overhead in grain's prefetch submit loop, not by I/O or
+    # CPU: on xarm_sim_96 (3.88M records) this runs at ~400 rec/s using 1.3 of 128 cores
+    # and 9 MB/s, with the main thread always inside _fill_buffer -> submit. Raising
+    # num_threads 16 -> 64 was measured and changed nothing (~395 rec/s) -- the readers
+    # were never the constraint. Making this materially faster needs batched reads
+    # (__getitems__, as ArrayRecordBuilder.__iter__ does) rather than one submit per
+    # record. Cached afterwards, so it is a one-time cost per dataset name.
     mpds = ds.to_iter_dataset(grain.ReadOptions(num_threads=16, prefetch_buffer_size=128)).map(_update)
 
     def take_keys(x):
